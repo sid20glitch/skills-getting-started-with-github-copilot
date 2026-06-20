@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
+import threading
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -101,14 +102,27 @@ def signup_for_activity(activity_name: str, email: str):
 
     # Get the specific activity
     activity = activities[activity_name]
+    # Normalize email for comparison and storage
+    email_norm = email.strip().lower()
 
-    # Validate student is not already signed up
-    if email in activity["participants"]:
-        raise HTTPException(status_code=400, detail="Student already signed up for this activity")
+    # Concurrency-safe signup
+    if not hasattr(app.state, "_signup_lock"):
+        app.state._signup_lock = threading.Lock()
 
-    # Add student
-    activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+    with app.state._signup_lock:
+        # Check duplicate (case-insensitive)
+        existing = [e.lower() for e in activity.get("participants", [])]
+        if email_norm in existing:
+            raise HTTPException(status_code=400, detail="Student already signed up for this activity")
+
+        # Check capacity
+        if len(activity.get("participants", [])) >= activity.get("max_participants", 0):
+            raise HTTPException(status_code=400, detail="Activity is full")
+
+        # Add normalized email
+        activity.setdefault("participants", []).append(email_norm)
+
+    return {"message": f"Signed up {email_norm} for {activity_name}"}
 
 
 @app.delete("/activities/{activity_name}/signup")
