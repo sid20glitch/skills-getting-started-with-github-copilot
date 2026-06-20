@@ -74,3 +74,18 @@ def test_nonexistent_activity_returns_404(client, reset_activities):
     # Assert
     assert response.status_code == 404
     assert response.json().get("detail") == "Activity not found"
+
+
+def test_activity_full_returns_400(client, reset_activities):
+    # Arrange
+    activity_name = "Math Olympiad"
+    # Set max participants to current length to simulate full activity
+    activities[activity_name]["max_participants"] = len(activities[activity_name]["participants"])
+    email = "overflow@example.com"
+
+    # Act
+    response = client.post(f"/activities/{activity_name}/signup", params={"email": email})
+
+    # Assert
+    assert response.status_code == 400
+    assert response.json().get("detail") == "Activity is full"
